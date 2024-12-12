@@ -1,0 +1,1103 @@
+
+'Modified May 1/04 - 10:30 AM - TL - Added CSR Stuff
+'Modified Sept 27, 2005 - TL - Added OE Flash stuff
+'Modified Oct 11, 2005 - TL - Added Link Shipments and Email
+'Modified Oct 17, 2005 - Installed Dec 14, 2005 - TL
+Option Explicit
+
+'OE CUSTOMER FLASH
+'Add button to OE called "OEFLASH"
+'Reference "Exact Customer Comment Flash" under Tools | References
+Private Declare Function GetActiveWindow Lib "user32" () As Long
+Private Declare Function GetUsername Lib "advapi32.dll" Alias "GetUserNameA" (ByVal lpBuffer As String, nSize As Long) As Long
+
+'Private Flash As Exact_CustomerFlash.clsCustomerFlash
+Private Flash As Object
+Private HWND As Long
+Private bNotFlashed As Boolean      'True if waiting for the flash to happen
+Private bContactShown As Boolean
+Private bShipInstrDone As Boolean
+
+'Used for CSR Stuff
+Private bReturnToDate As Boolean
+Private bReturnToShipTo As Boolean
+Private rsCSR As ADODB.Recordset
+Private rsHumRes As ADODB.Recordset
+Private rsCmpInfo As ADODB.Recordset
+Private rsQty As ADODB.Recordset
+Private rsKit As ADODB.Recordset
+'Private rsCourier As ADODB.Recordset
+Private myConn As ADODB.Connection
+
+Public sCSR As String
+Private sEmail As String
+Private sCourAcntNum As String
+Private iLoopStop As Integer
+Private strRoot As String
+Private cmpClassID As String
+
+
+'Used for
+Private bLinkShip As Boolean
+Private rsLinkShip As ADODB.Recordset
+Private sLinkShip As String
+
+Private Const cFlagQtyAvailable = 10000
+
+Private gNTUserID As String
+
+
+Private Sub macForm_Initialize()
+
+    ' It's the Order Entry screen, so disable and make invisible the Email Quote screen
+    EmailQuote.Visible = False
+    
+    Set myConn = macForm.ConnInfo.OpenADOConn
+    
+    ' Find Macola server path
+    If CheckPath("M:\mcc\") Then
+        strRoot = "M:\mcc\"
+    Else
+        strRoot = "\\bankers.ca\macolaes\mcc\"
+    End If
+    
+End Sub
+
+
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+Private Sub macForm_PostNavigate()
+    SaveSetting "Traveler", "ExtraFields", "OrderNumber", Trim(macForm.Order.Text)
+End Sub
+
+
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Private Sub macForm_Close()
+    SaveSetting "Traveler", "CurrentSettings", "ServerName", ""
+    SaveSetting "Traveler", "CurrentSettings", "DatabaseName", ""
+    SaveSetting "Traveler", "ExtraFields", "OrderNumber", ""
+End Sub
+
+
+
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'///////////////////////                                                                       ////////////////////////////////////////////////////////
+'//////////////////////  TRAVELER EXTRA FIELDS PROCEDURES        ///////////////////////////////////////////////////////
+''///////////////////////                                                                       ///////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+Private Sub ImprintData_Click()
+On Error GoTo ErrHandle
+    Dim ExePath As String
+    
+    SaveSetting "Traveler", "CurrentSettings", "ServerName", Trim(macForm.ConnInfo.Server)
+    SaveSetting "Traveler", "CurrentSettings", "DatabaseName", Trim(macForm.ConnInfo.Database)
+    SaveSetting "Traveler", "ExtraFields", "OrderNumber", Trim(macForm.Order.Text)
+    SaveSetting "Traveler", "ExtraFields", "RecordsetLocked", False
+
+    ' Check the user is in an order - i.e., order number has a value
+    If GetSetting("Traveler", "ExtraFields", "OrderNumber", "") = "" Then
+        MsgBox "You must be in an order to display Imprint data", vbOKOnly, "No Order Number"
+        Exit Sub
+    End If
+
+    'Added August 18, 2004 - TL
+    'Check to ensure in O or I type of order
+    If Left(macForm.Type.Text, 1) <> "I" _
+        And Left(macForm.Type.Text, 1) <> "O" _
+        And Left(macForm.Type.Text, 1) <> "C" Then
+            MsgBox "You must be in an 'I' ,  'O' or 'C'  type of order to enter Imprint data", vbOKOnly, "Wrong Order Type"
+            Exit Sub
+    End If
+
+
+    ExePath = GetSetting("Traveler", "ExtraFields", "LocationOfExe", "")
+    
+    'ExePath = "M:\mcc\traveler executable\TravelerExtraFields.exe"
+    ExePath = strRoot & "traveler executable\TravelerExtraFields.exe"
+    Shell ExePath, vbNormalFocus
+    AppActivate "Extra Fields", False
+
+'^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Exit Sub
+ErrHandle:
+  'If ExePath = "" Then ExePath = "M:\mcc\traveler executable\TravelerExtraFields.exe"
+  If ExePath = "" Then ExePath = strRoot & "traveler executable\TravelerExtraFields.exe"
+  
+  Select Case Err.Number
+    Case 53, 5, 76
+        ExePath = InputBox("Enter location of ETraveler_ExtraFields.exe", "Find Location", ExePath)
+        If ExePath = "" Then
+            MsgBox "Incorrect Path name.  Please verify and re-try", vbOKOnly, "Invalid Path"
+            Exit Sub
+        Else
+            SaveSetting "Traveler", "ExtraFields", "LocationOfExe", ExePath
+            Resume
+        End If
+    End Select
+End Sub
+
+
+' Added October 7th, 2008 - S.H.
+Private Sub OpeninCreateTraveler_Click()
+On Error GoTo ErrHandle
+
+    Dim ExePath As String
+    'ExePath = "M:\mcc\traveler executable\CreateTraveler.exe"
+    ExePath = strRoot & "traveler executable\CreateTraveler.exe"
+    
+    SaveSetting "Traveler", "CurrentSettings", "ServerName", Trim(macForm.ConnInfo.Server)
+    SaveSetting "Traveler", "CurrentSettings", "DatabaseName", Trim(macForm.ConnInfo.Database)
+    SaveSetting "Traveler", "CreateTraveler", "OrderNumber", Trim(macForm.Order.Text)
+    ' SaveSetting "Traveler", "CreateTraveler", "RecordsetLocked", False
+
+    ' Check the see that an Order No has been saved into the registry
+    If GetSetting("Traveler", "CreateTraveler", "OrderNumber", "") = "" Then
+        MsgBox "You must have an order to export before opening it in Create Traveler", vbOKOnly, "No Order Number"
+        Exit Sub
+    End If
+
+    ' Shell ExePath, vbNormalFocus
+    AppActivate "Create Traveler For Order", False
+
+'^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Exit Sub
+ErrHandle:
+  'If ExePath = "" Then ExePath = "M:\mcc\traveler executable\CreateTraveler.exe"
+  If ExePath = "" Then ExePath = strRoot & "traveler executable\CreateTraveler.exe"
+  
+  Select Case Err.Number
+    Case 53, 5, 76
+        'ExePath = InputBox("Enter location of CreateTraveler.exe", "Find Location", ExePath)
+        'If ExePath = "" Then
+        '    MsgBox "Incorrect Path name.  Please verify and re-try", vbOKOnly, "Invalid Path"
+        '    Exit Sub
+        'Else
+        '    SaveSetting "Traveler", "CreateTraveler", "LocationOfExe", ExePath
+        '    Resume
+        'End If
+        MsgBox "Create Traveler must be open in order to use this button"
+    End Select
+End Sub
+
+
+
+
+
+Private Sub View_Click()
+On Error GoTo ErrHandle
+
+    Dim ExePath As String
+    'ExePath = "M:\mcc\traveler executable\RepCodeList.exe"
+    ExePath = strRoot & "traveler executable\RepCodeList.exe"
+
+    Shell ExePath, vbNormalFocus
+    AppActivate "Rep Code List", False
+
+'^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Exit Sub
+ErrHandle:
+  MsgBox "Error in View_Click " & Err.Number & "-" & Err.Description, vbOKOnly, "ERROR"
+End Sub
+
+
+
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+Private Sub NextPromiseDate_Click()
+On Error GoTo ErrHandle
+    Dim ExePath As String
+    SaveSetting "Traveler", "CurrentSettings", "ServerName", Trim(macForm.ConnInfo.Server)
+    SaveSetting "Traveler", "CurrentSettings", "DatabaseName", Trim(macForm.ConnInfo.Database)
+
+    ExePath = GetSetting("Traveler", "PromiseDate", "LocationOfExe", "")
+
+    Shell ExePath, vbNormalFocus
+    AppActivate "Calculate Promise Date", False
+    
+'^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Exit Sub
+ErrHandle:
+  ' If ExePath = "" Then ExePath = "M:\mcc\traveler executable\CalculatePromiseDate.exe"
+  If ExePath = "" Then ExePath = strRoot & "traveler executable\CalculatePromiseDate.exe"
+  
+  Select Case Err.Number
+    Case 53, 5, 76
+        ExePath = InputBox("Enter location of ETraveler_PromiseDate.exe", "Find Location", ExePath)
+        If ExePath = "" Then
+            MsgBox "Incorrect Path name.  Please verify and re-try", vbOKOnly, "Invalid Path"
+            Exit Sub
+        Else
+            SaveSetting "Traveler", "PromiseDate", "LocationOfExe", ExePath
+            Resume
+        End If
+    End Select
+End Sub
+
+
+
+Private Sub Link_Click()
+On Error GoTo ErrHandle
+    Dim ExePath As String
+    
+    SaveSetting "Traveler", "CurrentSettings", "ServerName", Trim(macForm.ConnInfo.Server)
+    SaveSetting "Traveler", "CurrentSettings", "DatabaseName", Trim(macForm.ConnInfo.Database)
+    SaveSetting "Traveler", "ShippingLink", "OrderNumber", Trim(macForm.Order.Text)
+    
+    ' Check the user is in an order - i.e., order number has a value
+    If GetSetting("Traveler", "ShippingLink", "OrderNumber", "") = "" Then
+        MsgBox "You must be in an order to display Linked Shipment data", vbOKOnly, "No Order Number"
+        Exit Sub
+    End If
+
+    'Check to ensure in O or I type of order
+    If Left(macForm.Type.Text, 1) <> "I" _
+        And Left(macForm.Type.Text, 1) <> "O" _
+        And Left(macForm.Type.Text, 1) <> "C" Then
+            MsgBox "You must be in an 'I' ,  'O' or 'C'  type of order to enter LinkShipment data", vbOKOnly, "Wrong Order Type"
+            Exit Sub
+    End If
+
+
+    'ExePath = GetSetting("Traveler", "Traveler_Linked_Order", "LocationOfExe", "")
+    
+    'ExePath = "M:\mcc\traveler executable\Traveler_Linked_Order.exe"
+    ExePath = strRoot & "traveler executable\Traveler_Linked_Order.exe"
+    
+    Shell ExePath, vbNormalFocus
+    AppActivate "Shipping Links", False
+
+    Link.Text = "Linked Shipment"
+
+'^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Exit Sub
+ErrHandle:
+  'If ExePath = "" Then ExePath = "M:\mcc\traveler executable\Traveler_Linked_Order.exe"
+  If ExePath = "" Then ExePath = strRoot & "traveler executable\Traveler_Linked_Order.exe"
+  
+  Select Case Err.Number
+    Case 53, 5, 76
+        ExePath = InputBox("Enter location of Traveler_Linked_Order.exe", "Find Location", ExePath)
+        If ExePath = "" Then
+            MsgBox "Incorrect Path name.  Please verify and re-try", vbOKOnly, "Invalid Path"
+            Exit Sub
+        Else
+            SaveSetting "Traveler", "Traveler_Linked_Order", "LocationOfExe", ExePath
+            Resume
+        End If
+    End Select
+End Sub
+
+
+Private Sub OEFlash_Click()
+
+    Dim ret As Boolean
+    
+    ' Force open OE Flash, even if there are no comments
+    SaveSetting "OEFlash", "OE_Flash", "forceOpenOEFlash", "1"
+    
+    ret = ShowFlash()
+    
+    'If ret = False Then
+    '    MsgBox "There are no Flash Comments for this customer", vbOKOnly, "No Flash"
+    'End If
+End Sub
+
+
+
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'/////////////////////////////////////////////////////////////////     Event Procedures     //////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+'////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+Private Sub Order_Changed()
+'Runs when order no is typed in,
+'or selected from list,
+'or F5,
+'or when order is incremented to using arrows then tabbed
+
+    If Trim(Customer.Text) = "" Then
+    
+        Link.Text = "Link"
+        bNotFlashed = True
+        sLinkShip = ""
+        sCSR = ""
+        sEmail = ""
+        sCourAcntNum = ""
+        
+    End If
+    
+End Sub
+
+
+
+'////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Private Sub Order_LoseFocus(AllowLoseFocus As Boolean)
+'Runs when order no is typed in,
+'or F5,
+'or when order is incremented to using arrows then tabbed
+'or when click in first THEN select from list
+'NOT when selected from list if not clicked into it first.
+
+'In this proc, Customer.text = "" if the order number is manually typed in and then tab is hit, or F5
+'If the order is selected from the list OR if the order is incremented to using the left/right buttons, it has a value
+    
+    bContactShown = False
+    bShipInstrDone = False
+    iLoopStop = 0
+    cmpClassID = ""
+    
+    'Call link order - want to run even if new order
+    Call LookupLinkOrder
+
+    'If existing order then show flash and set csr values
+    If Trim(Customer.Text) <> "" Then
+        bReturnToDate = True
+        
+        CSR.SetFocus
+        EMail.SetFocus  '************************new 4:11
+
+    End If
+    
+End Sub
+
+
+
+'////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+Private Sub Date_GotFocus()
+
+    'When order is selected from the list, this is automatically triggered.
+    'Otherwise when tabbed/clicked into
+    If Link.Text = "Link" Then
+        Call LookupLinkOrder
+    End If
+    
+    If Trim(Customer.Text) <> "" And (CSR.Text = "" Or EMail.Text = "") And iLoopStop < 10 Then
+    
+        bReturnToDate = True
+        CSR.SetFocus
+        EMail.SetFocus '********* new
+        
+    End If
+    
+End Sub
+
+
+
+
+'////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+Private Sub Customer_LoseFocus(AllowLoseFocus As Boolean)
+On Error GoTo ErrHandle
+    '^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    
+    'CSR
+    If Trim(Customer.Text) <> "" Then
+        bReturnToShipTo = True
+        Call LookupCSR                'NEW  ************* testing removing this now
+        
+        If Trim(CSR.Text) = "" Or Trim(EMail.Text) = "" Then      '**** new test change and to or
+            CSR.SetFocus
+            EMail.SetFocus      '****  'this must stay in because of the order the controls receive focus when setfocus embedded
+        End If
+        
+    End If
+    
+    '^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    'OE CUSTOMER FLASH
+    If macForm.Customer.Text <> "" And bNotFlashed = True And Not IsNull(macForm.Customer.Text) Then
+Debug.Print 1 & bNotFlashed
+        Call ShowFlash
+        macForm.ShipTo.SetFocus
+    End If
+'^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Debug.Print 2 & bNotFlashed
+Exit Sub
+ErrHandle:
+    MsgBox "Error in Customer_LoseFocus " & Err.Number & "-" & Err.Description, vbOKOnly, "ERROR"
+End Sub
+
+
+
+
+'////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Private Sub ShipTo_GotFocus()
+    If bNotFlashed = True Then
+Debug.Print 3 & bNotFlashed
+        Call ShowFlash
+        ShipTo.SetFocus
+    End If
+    
+Debug.Print 4 & bNotFlashed
+End Sub
+
+
+'////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Private Sub ShipTo_LoseFocus(AllowLoseFocus As Boolean)
+    If macForm.ShipTo.Text = "SAME" Then
+        AllowLoseFocus = False
+        macForm.ShipTo.SetFocus
+        macForm.ShipTo.Text = ""
+    End If
+    
+    If CSR.Text = "" And sCSR <> "" Then
+        bReturnToShipTo = True
+        CSR.SetFocus
+        EMail.SetFocus     '************** new 4:11 pm
+    End If
+    
+    'Call LoadCourierActNum
+
+End Sub
+'////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+
+'////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Private Sub CSR_GotFocus()
+    On Error GoTo ErrHandle
+    Call LookupCSR
+    CSR.Text = sCSR
+    
+    'NEW ********** try removing next lines  -- now put back in
+    If bReturnToDate = True Or bReturnToShipTo = True And iLoopStop < 10 Then
+        iLoopStop = iLoopStop + 1
+        EMail.SetFocus
+    End If
+
+'^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Exit Sub
+ErrHandle:
+    If Err.Number = -2147352567 Then
+        Resume Next
+    Else
+        MsgBox "Error in CSR_GotFocus - " & Err.Number & "-" & Err.Description, vbOKOnly, "ERROR"
+    End If
+
+End Sub
+
+
+'Private Sub CSR_LoseFocus(AllowLoseFocus As Boolean)
+'    On Error GoTo ErrHandle
+
+    
+'    If Not bShipInstrDone Then
+'       ShipInstructions.SetFocus
+'    End If
+
+'^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+'Exit Sub
+'ErrHandle:
+'    If Err.Number = -2147352567 Then
+'        Resume Next
+'    Else
+'        MsgBox "Error in CSR_GotFocus - " & Err.Number & "-" & Err.Description, vbOKOnly, "ERROR"
+'    End If
+
+'End Sub
+
+
+'////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+Private Sub CSR_KeyPress(KeyAscii As Integer)
+    'Can't change CSR - but disabling causes all kinds of issues.  Easiest to remove keystrokes.
+    KeyAscii = 0
+End Sub
+
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Private Sub EMail_GotFocus()
+On Error GoTo ErrHandle
+
+    EMail.Text = sEmail
+    If bReturnToShipTo = True And iLoopStop < 10 Then
+        iLoopStop = iLoopStop + 1
+        bReturnToShipTo = False
+        ShipTo.SetFocus
+    ElseIf bReturnToDate = True And iLoopStop < 10 Then
+        iLoopStop = iLoopStop + 1
+        bReturnToDate = False
+        Date.SetFocus
+    End If
+
+'^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Exit Sub
+ErrHandle:
+    If Err.Number = -2147352567 Then
+        Resume Next
+    Else
+        MsgBox "Error in Email_GotFocus - " & Err.Number & "-" & Err.Description, vbOKOnly, "ERROR"
+    End If
+
+End Sub
+
+
+Private Sub ShipInstructions_GotFocus()
+On Error GoTo ErrHandle
+
+    If Not bShipInstrDone Then
+    
+        bShipInstrDone = True
+        
+        If Trim(ShipInstructions.Text) = "" And sCourAcntNum <> "" Then
+        
+            ShipInstructions.Text = sCourAcntNum
+            
+         '   If bReturnToShipTo = True And iLoopStop < 10 Then
+         '       iLoopStop = iLoopStop + 1
+         '       bReturnToShipTo = False
+         '       ShipTo.SetFocus
+         '   ElseIf bReturnToDate = True And iLoopStop < 10 Then
+         '       iLoopStop = iLoopStop + 1
+         '       bReturnToDate = False
+         '       Date.SetFocus
+         '   End If
+            
+         '   Customer.SetFocus
+            
+        End If
+        
+    End If
+
+    '^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    Exit Sub
+ErrHandle:
+    MsgBox "Error in Email_GotFocus - " & Err.Number & "-" & Err.Description, vbOKOnly, "ERROR"
+End Sub
+
+
+
+
+'////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Private Sub QtyOrderedCredited_LoseFocus(AllowLoseFocus As Boolean)
+    On Error GoTo ErrHandle
+
+    ' ***** TURN ON/OFF *****
+    If True Then
+
+        Dim macItemNo As String
+        Dim qtyLeft As Long
+        Dim pCat As String
+        Dim sql As String
+        Dim cLimit As Long
+
+        ' If it's an order sample (RS), exit
+        If Trim(OrderType.Text) = "RS" Then
+            Exit Sub
+        End If
+
+
+        ' IF it's an O-type order
+        If Trim(macForm.Type.Text) <> "O=Order" Then
+            Exit Sub
+        End If
+
+        If cmpClassID = "" Then
+
+            ' GET COMPANY INFO (for Star Level)
+            sql = " SELECT ClassificationID " _
+                & " FROM cicmpy " _
+                & " WHERE cmp_code = '" & Trim(macForm.Customer.Text) & "'"
+            Set rsCmpInfo = Nothing
+            Set rsCmpInfo = New ADODB.Recordset
+            rsCmpInfo.Open sql, myConn, adOpenForwardOnly, adLockReadOnly
+            
+            If rsCmpInfo.BOF And rsCmpInfo.EOF Then
+'                Set rsCmpInfo = Nothing
+'                rsCmpInfo.Close
+                Exit Sub
+            Else
+               cmpClassID = rsCmpInfo!ClassificationID
+            End If
+    
+        End If
+
+        ' If it's not a 6 or 7 Star customer, EXIT
+        If cmpClassID <> "6ST" And cmpClassID <> "7ST" Then
+            Exit Sub
+        End If
+
+        macItemNo = Trim(macForm.Item.Text)
+
+        ' GET AVAILABLE QTY
+        sql = " SELECT  i.prod_cat, qtyAvailable =  IsNull(SUM(l.qty_on_hand - l.qty_allocated), '0.0000'), a.qty As catLimit, i.kit_feat_fg As kit " _
+            & " FROM    dbo.imitmidx_sql i INNER JOIN " _
+            & "         dbo.iminvloc_sql l ON l.item_no = i.item_no INNER JOIN " _
+            & "         dbo.allstar_prod_cat_limit a ON rtrim(a.prod_cat) = rtrim(i.prod_cat) " _
+            & " WHERE   rtrim(l.item_no) = '" & macItemNo & "' AND l.loc = '1' " _
+            & " GROUP BY i.prod_cat, a.qty, i.kit_feat_fg "
+        Set rsQty = Nothing
+        Set rsQty = New ADODB.Recordset
+        rsQty.Open sql, myConn, adOpenForwardOnly, adLockReadOnly
+
+        If rsQty.BOF And rsQty.EOF Then
+            Set rsQty = Nothing
+'            rsQty.Close
+            Exit Sub
+        End If
+
+        ' If it's not a Set item
+        If rsQty!kit <> "K" Then
+        
+            ' If item is a candidate (Qty too low for Item type & Catogory with limits)
+            qtyLeft = CLng(rsQty!qtyAvailable)
+            pCat = Trim(rsQty!prod_cat)
+            cLimit = CLng(rsQty!catLimit)
+            
+            ' If Stock left of item is lower than category limit, WARNING
+            If qtyLeft <= cLimit Then
+                MsgBox "All Star Traveler Alert!" & vbCrLf _
+                    & "Low Stock - Please verify inventory", vbExclamation, "Low Stock for 6/7-Star Customers"
+            End If
+        
+        ' Item is a set
+        '   verify each item individually
+        Else
+            
+            ' GET COMPONENT ITEMS QTYs AND CATs
+            sql = " SELECT  ik.prod_cat, qtyAvailable =  IsNull(SUM(l.qty_on_hand - l.qty_allocated), '0.0000'), a.qty As catLimit  " _
+                & " FROM    dbo.imitmidx_sql i INNER JOIN  " _
+                & "         dbo.imkitfil_sql k ON i.item_no = k.item_no INNER JOIN " _
+                & "         dbo.imitmidx_sql ik ON ik.item_no = k.comp_item_no INNER JOIN " _
+                & "         dbo.iminvloc_sql l ON l.item_no = k.comp_item_no INNER JOIN " _
+                & "         dbo.allstar_prod_cat_limit a ON rtrim(a.prod_cat) = rtrim(ik.prod_cat) " _
+                & " WHERE   rtrim(i.item_no) = '" & macItemNo & "' AND l.loc = '1' " _
+                & " GROUP BY ik.prod_cat, a.qty "
+            Set rsKit = Nothing
+            Set rsKit = New ADODB.Recordset
+            rsKit.Open sql, myConn, adOpenForwardOnly, adLockReadOnly
+            
+            If Not rsKit.BOF And Not rsKit.EOF Then
+                Do While Not rsKit.EOF And Not rsKit.BOF
+                    
+                    qtyLeft = CLng(rsQty!qtyAvailable)
+                    pCat = Trim(rsQty!prod_cat)
+                    cLimit = CLng(rsQty!catLimit)
+                    
+                    ' If Stock left of item is lower than category limit, WARNING
+                    If qtyLeft <= cLimit Then
+                        MsgBox "All Star Traveler Alert!" & vbCrLf _
+                            & "Low Stock - Please verify inventory", vbExclamation, "Low Stock for 6/7-Star Customers"
+                        Exit Sub
+                    End If
+                    
+                    rsKit.MoveNext
+                    
+                Loop
+            End If
+            
+        End If
+    End If
+    
+    '^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    Exit Sub
+ErrHandle:
+    MsgBox "Error in QtyShippedReturned_LoseFocus proc " & Err.Number & "-" & Err.Description, vbOKOnly, "ERROR"
+End Sub
+
+
+
+'////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Private Sub QtyShippedReturned_LoseFocus(AllowLoseFocus As Boolean)
+    On Error GoTo ErrHandle
+
+    Dim qtyOrdered, qtyShipped As Long
+    Dim Answer, ExePathEmail, sqlLoc, toName As String
+
+    If Trim(macForm.Type.Text) = "O=Order" Then
+    
+        qtyOrdered = Trim(macForm.QtyOrderedCredited.Text)
+        qtyShipped = Trim(macForm.QtyShippedReturned.Text)
+        
+        ' IF more stock ordered than shipped, we are missing available stock
+        If qtyOrdered > qtyShipped Then
+        
+            Answer = MsgBox("Stock Missing!" & vbCrLf & "Qty Ordered is greater than Qty Shipped." & vbCrLf _
+                    & "Would you like to accept this value anyway?", vbYesNo, "Stock for " & macForm.Item.Text)
+            If Answer <> vbYes Then
+                macForm.QtyOrderedCredited.SetFocus
+                MsgBox "Please change the value of Qty Ordered"
+            Else
+            
+                ' Get email address of DML to send it to (the one entering the order)
+                gNTUserID = GetNTUserID
+                sqlLoc = " SELECT ltrim(rtrim(mail)) As Email " _
+                    & " FROM humres " _
+                    & " WHERE ltrim(rtrim(usr_id)) = '" & Trim(UCase(gNTUserID)) & "' "
+                Set rsHumRes = New ADODB.Recordset
+                rsHumRes.Open sqlLoc, myConn, adOpenForwardOnly, adLockReadOnly
+    
+                'ExePathEmail = "M:\mcc\traveler executable\SendEmail.exe"
+                ExePathEmail = strRoot & "traveler executable\SendEmail.exe"
+                SaveSetting "SendEmail", "SendEmail", "appCalled", "1"
+                SaveSetting "SendEmail", "SendEmail", "from", "mailman@spectorandco.ca"
+                
+                ' IF it doesn't exist, email
+                If (rsHumRes.BOF And rsHumRes.EOF) Or IsNull(rsHumRes!EMail) Or rsHumRes!EMail = "" Then
+                    
+                    SaveSetting "SendEmail", "SendEmail", "to", "stephane@spectorandco.ca"
+                    SaveSetting "SendEmail", "SendEmail", "subject", "HumRes email address is missing"
+                    SaveSetting "SendEmail", "SendEmail", "message", gNTUserID & " either doesnt have an email addess in the " _
+                        & " system or isnt in the system at all "
+                    
+                Else
+                
+                    SaveSetting "SendEmail", "SendEmail", "to", rsHumRes!EMail
+                    SaveSetting "SendEmail", "SendEmail", "subject", "Order " & Trim(macForm.Order.Text) & ": Accepted - Qty Ordered larger than Qty Shipped"
+                    SaveSetting "SendEmail", "SendEmail", "message", "Quantity was accepted for item " & Trim(macForm.Item.Text) _
+                        & " (Order No. " & Trim(macForm.Order.Text) & "), where Qty Ordered: " & qtyOrdered & ", Qty Shipped: " & qtyShipped
+                
+                End If
+                
+                Shell ExePathEmail, vbNormalFocus
+                
+                rsHumRes.Close
+                Set rsHumRes = Nothing
+                
+            End If  ' END IF answered yes to accept change
+        End If  ' END IF qtyOrdered > qtyShipped
+    End If  ' END IF - order type is I or O
+    
+    Exit Sub
+    
+'^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ErrHandle:
+    MsgBox "Error in QtyShippedReturned_LoseFocus proc " & Err.Number & "-" & Err.Description, vbOKOnly, "ERROR"
+End Sub
+
+
+Private Sub Loc_GotFocus()
+
+    ' Call the Customer Contacts form, if it hasnt been called yet
+    If Not bContactShown Then
+        Call showContactsWindow
+    End If
+     
+End Sub
+
+
+
+Private Sub Item_GotFocus()
+    
+    ' Call the Customer Contacts form, if it hasnt been called yet
+    If Not bContactShown Then
+        Call showContactsWindow
+    End If
+    
+    On Error GoTo ErrHandle
+        Flash.CloseCustomerFlash
+        Set Flash = Nothing
+    Exit Sub
+ErrHandle:
+    If Err.Number = 462 Or Err.Number = 91 Then 'The object is already closed
+        'do nothing
+    Else
+        MsgBox "Error in Item_GotFocus " & Err.Number & " - " & Err.Description, vbOKOnly, "Error"
+    End If
+End Sub
+
+
+
+Private Sub showContactsWindow()
+
+    Dim ExePathCust As String
+    Dim CusNo As String
+
+    ' Call the Customer Contacts form, if it hasnt been called yet
+    'ExePathCust = "M:\mcc\traveler executable\CustomerContacts.exe"
+    ExePathCust = strRoot & "traveler executable\CustomerContacts.exe"
+    If macForm.Customer.Text = "" Then
+        MsgBox "There is no customer loaded", vbOKOnly, "No Customer"
+        Exit Sub
+    End If
+    SaveSetting "CustomerContacts", "Login", "txtServerName", "zeus"
+    SaveSetting "CustomerContacts", "Login", "txtDatabaseName", "100"
+    SaveSetting "CustomerContacts", "Login", "fromMacola", "1"
+    SaveSetting "CustomerContacts", "CustomerContacts", "CusNo", macForm.Customer.Text
+    SaveSetting "CustomerContacts", "CustomerContacts", "OrderNo", macForm.Order.Text
+    Shell ExePathCust, vbNormalFocus
+    
+    bContactShown = True
+
+End Sub
+
+
+
+
+
+
+
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'////////////////////////////////////////     CSR     ////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Private Sub LookupCSR()
+On Error GoTo ErrHandle
+    Dim sqlLoc As String
+    sqlLoc = " SELECT ltrim(rtrim(H.FullName)) as CSR, ltrim(rtrim(cmp_e_mail)) as Email, C.Comment1 AS courierAccount " _
+        & "    FROM Humres H INNER JOIN cicmpy C " _
+        & "    ON H.res_id = C.AccountEmployeeID" _
+        & "    WHERE ltrim(rtrim(debcode))='" & Trim(macForm.Customer.Text) & "'"
+    Set rsCSR = New ADODB.Recordset
+    rsCSR.Open sqlLoc, myConn, adOpenForwardOnly, adLockReadOnly
+    If rsCSR.BOF Then
+        sCSR = "No CSR"
+        sEmail = "No Email"
+    Else
+        sCSR = Trim(rsCSR!CSR & "")
+        sEmail = Trim(rsCSR!EMail & "")
+        sCourAcntNum = Trim(rsCSR!courierAccount & "")
+        
+    End If
+    
+    If sCSR = "" Then sCSR = "No CSR"
+    If sEmail = "" Then sEmail = "No Email"
+    
+    rsCSR.Close
+    Set rsCSR = Nothing
+
+'^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Exit Sub
+ErrHandle:
+    MsgBox "Error in LookupCSR proc" & Err.Number & "-" & Err.Description, vbOKOnly, "ERROR"
+End Sub
+
+
+
+
+
+
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'///////////////////////                                                                                           /////////////////////////////
+'//////////////////////  COPY DATE TO PROMISE DATE AND REQUIRED DATE       //////////////////////////////
+''///////////////////////                                                                                          //////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+Private Sub CopyDate_Click()
+  On Error GoTo ErrHand
+  Dim CN_loc As ADODB.Connection
+  Dim strConn As String
+  Dim sql As String
+
+    'You must be in the form header for this to work.
+    If macForm.Date.Enabled = False Then
+        MsgBox "You must be in the header for this to work.  " & vbCrLf _
+                     & " Please re-open the order and try again.", vbOKOnly, "Must be in OE Header"
+        Exit Sub
+    End If
+    'The ship date must be a valid date
+    If Not IsDate(macForm.ShipDate.Text) Then
+        MsgBox "Ship date must be a valid date.  " & vbCrLf _
+                     & " Please change date", vbOKOnly, "Invalid Date"
+        Exit Sub
+    End If
+    
+    'A.S.A.P.'
+  'You must be in an order
+  If macForm.Order.Text = "" Then
+        MsgBox "You must be in an order.  " & vbCrLf _
+                     & " Please re-open the order and try again.", vbOKOnly, "Must be in valid Order"
+        Exit Sub
+    End If
+         
+  'Get connection
+  strConn = "DRIVER={SQL Server};SERVER=" & Trim(macForm.ConnInfo.Server) & _
+            ";DATABASE=" & macForm.ConnInfo.Database & ";Trusted_Connection=YES"
+  Set CN_loc = New Connection
+  CN_loc.ConnectionString = strConn
+    
+  'Update recordset
+    sql = "Update oeordlin_sql " _
+       & " Set promise_dt = '" & macForm.ShipDate.Text & "', req_ship_dt =  '" & macForm.ShipDate.Text & "'" _
+       & " WHERE ltrim(rtrim(ord_no)) = '" & Trim(macForm.Order.Text) & "'"
+
+'Debug.Print sql
+
+  CN_loc.Open
+  CN_loc.Execute sql
+  MsgBox "Date changed to " & macForm.ShipDate.Text, vbOKOnly, "Date Changed"
+  CN_loc.Close
+  Set CN_loc = Nothing
+  
+  Exit Sub
+ErrHand:
+    MsgBox "Error in CopyDate " & vbCrLf & Err.Number & "-" & Err.Description, vbOKOnly, "Copy Date"
+    If CN_loc.State = 1 Then 'open'
+        CN_loc.Close
+    End If
+    Set CN_loc = Nothing
+End Sub
+
+
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'/////////////////////////////////////////////   OE  CUSTOMER FLASH     ////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+Private Function ShowFlash()
+    On Error GoTo ErrHandle
+    
+    Dim CusNo As String
+    CusNo = macForm.Customer.Text
+    
+    Dim ExePath As String
+    'ExePath = "M:\mcc\traveler executable\OE_Flash.exe"
+    ExePath = strRoot & "traveler executable\OE_Flash.exe"
+    
+    If macForm.Customer.Text = "" Then
+        MsgBox "There is no customer loaded", vbOKOnly, "No Customer"
+        Exit Function
+    End If
+    
+    SaveSetting "OEFlash", "Login", "fromMacola", "1"
+    SaveSetting "OEFlash", "OE_Flash", "CusNo", CusNo
+    
+    Shell ExePath, vbNormalFocus
+    
+    ShowFlash = True
+    bNotFlashed = False
+    
+    Exit Function
+ErrHandle:
+    If Err.Number = 462 Or Err.Number = 91 Then 'The object is already closed
+        'do nothing
+    ElseIf Err.Number = 429 Then
+        MsgBox "The OE Flash is not installed and Registered on this machine.  Please contact Martin for Assistance.", vbOKOnly, "Missing Component"
+        bNotFlashed = False
+    Else
+        MsgBox "Error in ShowFlash " & Err.Number & " - " & Err.Description, vbOKOnly, "Error"
+        ShowFlash = False
+    End If
+End Function
+
+'////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'/////////////////////////////////////////////   LOOKUP LINK ORDER     //////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+Private Sub LookupLinkOrder()
+    On Error GoTo ErrHandle
+    
+    Dim sqlLoc As String
+    
+    sqlLoc = "SELECT Count(*) as NumRecords " _
+                & " FROM EXACT_TRAVELER_LINKED_SHIPMENT " _
+                & "    WHERE ltrim(rtrim(ordno))='" & Trim(macForm.Order.Text) & "'"
+    Set rsLinkShip = New ADODB.Recordset
+    rsLinkShip.Open sqlLoc, myConn, adOpenForwardOnly, adLockReadOnly
+    
+    If rsLinkShip!Numrecords > 0 Then
+        Link.Text = "LINKED SHIPMENT"
+    Else
+        Link.Text = "Not Linked"
+    End If
+    
+    rsLinkShip.Close
+    Set rsLinkShip = Nothing
+    
+'^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Exit Sub
+ErrHandle:
+    MsgBox "Error in LookupLinkOrder proc", vbOKOnly, "ERROR"
+End Sub
+
+'////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+
+'///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+'////////////////       GET NTUSERID         //////////////////////////////////////////////////////////////////////////////////
+'///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Public Function GetNTUserID()
+    
+    'Returns NT UserID
+    '^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    On Error GoTo ErrHandle
+    '^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    Dim str As String
+    Dim API_Return As Integer
+    Dim length As Long
+    
+    'Create string of nulls
+    str = String(255, 0)
+    
+    'Call API
+    API_Return = GetUsername(str, Len(str))
+    
+    'Returns 0 if failure
+    If API_Return = 0 Then
+        'failure
+        GetNTUserID = ""
+        Exit Function
+    End If
+    
+    'str will have NTUserID followed by string of nulls
+    'Find the first null characters in the string to determine the length of the userid
+    length = InStr(1, str, Chr(0)) - 1
+    
+    str = Left(str, length)
+    
+    'RETURN
+    GetNTUserID = Trim(str)
+    '^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    
+    '^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    Exit Function
+ErrHandle:
+    MsgBox "Error Number:  " & Err.Number & vbCrLf & Err.Description, _
+    vbCritical, "Error in ' modUserName - GetNTUserID ' procedure "
+End Function
+
+
+
+
+Public Function CheckPath(strPath As String) As Boolean
+
+    If Dir$(strPath) <> "" Then
+        CheckPath = True
+    Else
+        CheckPath = False
+    End If
+    
+End Function
+
+
+
+

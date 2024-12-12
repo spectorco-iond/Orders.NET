@@ -1,0 +1,56 @@
+﻿<?xml version="1.0"?>
+<doc>
+<assembly>
+<name>
+Orders
+</name>
+</assembly>
+<members>
+<member name="T:Orders.My.Resources.Resources">
+<summary>
+  A strongly-typed resource class, for looking up localized strings, etc.
+</summary>
+</member>
+<member name="P:Orders.My.Resources.Resources.ResourceManager">
+<summary>
+  Returns the cached ResourceManager instance used by this class.
+</summary>
+</member>
+<member name="P:Orders.My.Resources.Resources.Culture">
+<summary>
+  Overrides the current thread's CurrentUICulture property for all
+  resource lookups using this strongly typed resource class.
+</summary>
+</member>
+<member name="F:Orders.xTextBox.mNumeric">
+ Declare a local variable used to contain the current dollar value
+</member>
+<member name="P:Orders.xTextBox.NumericValue">
+ Declare public property used to get/set current dollar value
+</member>
+<member name="P:Orders.xTextBox.StringValue">
+ Declare public property used to get/set current dollar value
+</member>
+<member name="P:Orders.xTextBox.DateValue">
+ Declare public property used to get/set current dollar value
+</member>
+<member name="M:Orders.xTextBox.#ctor">
+ Default constructor; sets dollar value to zero when control is created
+</member>
+<member name="M:Orders.xTextBox.OnPaint(System.Windows.Forms.PaintEventArgs)">
+ Default OnPaint event
+</member>
+<member name="M:Orders.xTextBox.xTextBox_KeyPress(System.Object,System.Windows.Forms.KeyPressEventArgs)">
+ Key press event handler or text; limits user inputs to numbers,
+ a single decimal point, and control characters to permit edits 
+ to the contents of the box (e.g., using the backspace key)
+</member>
+<member name="M:Orders.xTextBox.xTextBox_GotFocus(System.Object,System.EventArgs)">
+ Revert back to the display of numbers only whenever the user 
+ clicks in the box for editing purposes
+</member>
+<member name="M:Orders.xTextBox.xTextBox_TextChanged(System.Object,System.EventArgs)">
+ Update the dollar value each time the value is changed
+</member>
+</members>
+</doc>

@@ -1,0 +1,5 @@
+--OEI chenges for thermo
+
+
+-> mThermometer.getTimeSpecs line-333 -> added more steps and filter Prod Time by Facility location identified from mfg_loc
+-> getDefaultMachineline Line 304 -> added more steps and filter Prod Time by Facility location identified from mfg_loc
