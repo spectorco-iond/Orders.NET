@@ -860,26 +860,36 @@ Friend Class ucOrder
                 Dim oSearch As New cSearch(GetSearchElementByControlName(btnElement.Name))
                 If oSearch.Form.FoundRow <> -1 Then
                     Dim txtElement As Object
+
+
                     txtElement = GetElementByControlName(btnElement.Name)
-                    txtElement.Text = oSearch.Form.FoundElementValue
+
+                    '++ID 12.12.2024 concatenate if is the case shipping instruction 1
+                    If btnElement.Name = "cmdInstructionsSearch" Then
+                        txtElement.Text &= "  " & Trim(oSearch.Form.FoundElementValue)
+                    Else
+                        txtElement.Text = oSearch.Form.FoundElementValue
+                    End If
+
+
                     Select Case btnElement.Name
-                        Case "cmdUser_Def_Fld_3Search"
-                            'ttToolTip.SetToolTip(txtElement, oSearch.Form.TextMatrix(oSearch.Form.FoundRow, 2))
-                            ttToolTip.SetToolTip(txtElement, oSearch.Form.DataGrid.Rows(oSearch.Form.FoundRow).Cells(2).Value)
+                            Case "cmdUser_Def_Fld_3Search"
+                                'ttToolTip.SetToolTip(txtElement, oSearch.Form.TextMatrix(oSearch.Form.FoundRow, 2))
+                                ttToolTip.SetToolTip(txtElement, oSearch.Form.DataGrid.Rows(oSearch.Form.FoundRow).Cells(2).Value)
 
 
 
 
-                        Case Else
-                            'ttToolTip.SetToolTip(txtElement, oSearch.Form.TextMatrix(oSearch.Form.FoundRow, 3))
-                            ttToolTip.SetToolTip(txtElement, oSearch.Form.DataGrid.Rows(oSearch.Form.FoundRow).Cells(3).Value)
+                            Case Else
+                                'ttToolTip.SetToolTip(txtElement, oSearch.Form.TextMatrix(oSearch.Form.FoundRow, 3))
+                                ttToolTip.SetToolTip(txtElement, oSearch.Form.DataGrid.Rows(oSearch.Form.FoundRow).Cells(3).Value)
 
-                    End Select
+                        End Select
 
-                    txtElement.focus()
+                        txtElement.focus()
 
-                End If
-                oSearch.Dispose()
+                    End If
+                    oSearch.Dispose()
                 oSearch = Nothing
 
                 If btnElement.Name = "cmdCustomerSearch" Then txtCus_No_Validated(txtCus_No, New System.EventArgs)
@@ -2533,10 +2543,18 @@ Friend Class ucOrder
                 txtUser_Def_Fld_3.Text = m_oOrder.Ordhead.User_Def_Fld_3
                 txtContactEmail.Text = m_oOrder.Ordhead.Cus_Email_Address
 
-                Save()
-                '++ID 8.14.2018 
+                '++ID 12.12.2024 show customer EIN
+                txtShip_Instruction_1.Text &= "EIN:" & m_oOrder.Ordhead.Customer.TextField7 & ". "
+
+                'moved before  function save and not after
                 txtCustGroup.Text = m_oOrder.Ordhead.Customer.textfield3
                 ttToolTip.SetToolTip(txtCustGroup, "Customer Group Name")
+
+                Save()
+
+                '++ID 8.14.2018 
+                'txtCustGroup.Text = m_oOrder.Ordhead.Customer.textfield3
+                'ttToolTip.SetToolTip(txtCustGroup, "Customer Group Name")
 
 
                 If m_oOrder.Ordhead.Customer.TextField6 <> String.Empty Then
